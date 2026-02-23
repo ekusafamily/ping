@@ -7,7 +7,7 @@ const TelegramBot = require("node-telegram-bot-api");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Optional Telegram
+// Optional Telegram alerts
 const TELEGRAM_TOKEN = ""; // Add your bot token
 const TELEGRAM_CHAT_ID = ""; // Add your chat ID
 let bot;
@@ -22,7 +22,21 @@ app.use(bodyParser.json());
 let sites = [];
 let stats = {};
 
-// Helper function to check a site
+// Default sites (monitored on startup)
+const defaultSites = [
+  "https://google.com",
+  "https://kinthithe2026.onrender.com",
+  "https://ultron.brianireri.online"
+];
+
+defaultSites.forEach(site => {
+  if (!sites.includes(site)) {
+    sites.push(site);
+    stats[site] = { total: 0, failures: 0, lastStatus: "UNKNOWN", lastResponse: "N/A" };
+  }
+});
+
+// Function to check a site
 async function checkSite(site) {
   const start = Date.now();
   const time = new Date().toLocaleTimeString();
@@ -55,6 +69,9 @@ setInterval(() => {
   sites.forEach(site => checkSite(site));
 }, 10000);
 
+// Immediately check all sites on startup
+sites.forEach(site => checkSite(site));
+
 // Routes
 
 // Dashboard
@@ -83,16 +100,27 @@ app.get("/", (req, res) => {
   res.send(html);
 });
 
-// Add a site
+// Add a new site
 app.post("/add-site", (req, res) => {
   const site = req.body.site.trim();
   if (site && !sites.includes(site)) {
     const url = site.startsWith("http") ? site : "https://" + site;
     sites.push(url);
     stats[url] = { total: 0, failures: 0, lastStatus: "UNKNOWN", lastResponse: "N/A" };
+
+    // Immediately check the new site
+    checkSite(url);
   }
   res.redirect("/");
 });
+
+// Optional: self-ping to keep free-tier hosts awake
+setInterval(() => {
+  const selfUrl = process.env.SELF_URL || `http://localhost:${PORT}`;
+  axios.get(selfUrl)
+    .then(() => console.log(`✅ Self-ping successful at ${new Date().toLocaleTimeString()}`))
+    .catch(() => console.log(`❌ Self-ping failed at ${new Date().toLocaleTimeString()}`));
+}, 5 * 60 * 1000); // every 5 minutes
 
 // Start server
 app.listen(PORT, () => {
